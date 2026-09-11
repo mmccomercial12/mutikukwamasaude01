@@ -37,6 +37,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { UserRole, PlanType, PlanPeriodicity, PaymentMethod } from '../../types';
 import { PROVINCES_ANGOLA, PLANS_DEFINITIONS, SYSTEM_CONFIG_INITIAL } from '../../services/mockData';
+import { supabaseData } from '../../services/supabase';
 import { reverseGeocodeCoordinates, saveUserGpsLocation } from '../../services/geoService';
 import {
   evaluatePasswordStrength,
@@ -132,6 +133,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [comprovativoTamanho, setComprovativoTamanho] = useState<string>('340 KB');
   const [referenciaPagamento, setReferenciaPagamento] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [systemConfig, setSystemConfig] = useState(() => supabaseData.getConfig());
+
+  useEffect(() => {
+    const handleConfigUpdate = (e?: any) => {
+      setSystemConfig(e?.detail || supabaseData.getConfig());
+    };
+    window.addEventListener('mutikukwama:config-updated', handleConfigUpdate);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'mutikukwama_system_config') handleConfigUpdate();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('mutikukwama:config-updated', handleConfigUpdate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   // Helper to calculate prices and discounts according to selected plan and periodicity
   const calculatePlanPrice = (planType: PlanType, periodicity: PlanPeriodicity) => {
@@ -1685,7 +1702,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                   <div className="text-xs text-slate-600">
                                     Número Express:{' '}
                                     <span className="font-bold text-slate-800">
-                                      {SYSTEM_CONFIG_INITIAL.multicaixa_express_numero}
+                                      {systemConfig.multicaixa_express_numero || '+244 927 042 499'}
                                     </span>
                                   </div>
                                   <div className="pt-1">
@@ -1694,7 +1711,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleCopyText(
-                                          SYSTEM_CONFIG_INITIAL.multicaixa_express_numero,
+                                          systemConfig.multicaixa_express_numero || '+244 927 042 499',
                                           'mcx'
                                         );
                                       }}
@@ -1738,9 +1755,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                     Bancária
                                   </div>
                                   <div className="text-xs text-slate-600 leading-snug">
-                                    {SYSTEM_CONFIG_INITIAL.banco_nome} · IBAN{' '}
+                                    {systemConfig.banco_nome || 'BAI — Banco Angolano de Investimentos'} · IBAN{' '}
                                     <span className="font-mono font-bold text-slate-800 break-all">
-                                      {SYSTEM_CONFIG_INITIAL.banco_iban}
+                                      {systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3'}
                                     </span>
                                   </div>
                                   <div className="pt-1">
@@ -1748,7 +1765,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleCopyText(SYSTEM_CONFIG_INITIAL.banco_iban, 'iban');
+                                        handleCopyText(systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3', 'iban');
                                       }}
                                       className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 transition-colors cursor-pointer"
                                     >

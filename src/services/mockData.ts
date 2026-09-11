@@ -72,10 +72,15 @@ export const SYSTEM_CONFIG_INITIAL: SystemConfig = {
     'Aviso de Saúde: A plataforma MUTIKUKWAMA é um sistema tecnológico de conexão e busca informativa em conformidade com a ARMED e o MINSA. Consulte sempre um médico ou farmacêutico habilitado.',
   multicaixa_express_numero: '+244 927 042 499',
   multicaixa_entidade: '99024',
+  multicaixa_tag: 'Activação Imediata',
+  multicaixa_instrucao: 'Validação automática por cruzamento do número de envio ou ID de transacção.',
   banco_nome: 'BAI — Banco Angolano de Investimentos',
   banco_titular: 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA',
   banco_iban: 'AO06 0040 0000 1234 5678 9012 3',
   banco_swift: 'BAIAOLLU',
+  banco_tag: 'Bancário',
+  canais_pagamento_titulo: 'Canais Oficiais de Pagamento em Angola',
+  canais_pagamento_subtitulo: 'Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)',
   taxa_entrega_padrao: 1500, // AOA
   precos_planos: {
     gratis: 0,

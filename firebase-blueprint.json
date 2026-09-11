@@ -189,6 +189,9 @@
     "/logs_atividade/{logId}": {
       "schema": "ActivityLog",
       "description": "Logs de auditoria e segurança administrativa"
+    },
+    "/config/{configId}": {
+      "description": "Configurações institucionais, planos de subscrição e canais de pagamento em Angola"
     }
   }
 }

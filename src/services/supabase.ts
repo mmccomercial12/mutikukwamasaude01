@@ -26,6 +26,7 @@ import {
   MostSearchedItem,
   UnitReview,
   MinsaAnnouncement,
+  SubscriptionPlanDefinition,
 } from '../types';
 import {
   INITIAL_HEALTH_UNITS,
@@ -34,6 +35,7 @@ import {
   INITIAL_EXAMS,
   INITIAL_ACTIVITY_LOGS,
   SYSTEM_CONFIG_INITIAL,
+  PLANS_DEFINITIONS,
   DEMO_USERS,
   PROVINCES_ANGOLA,
   INITIAL_SPONSORS,
@@ -86,6 +88,8 @@ export function calculateHaversineDistance(
 }
 
 class SupabaseDataService {
+  private configSyncInitialized = false;
+
   constructor() {
     // Ensure all accounts are logged off by default so users must log in with password
     if (typeof window !== 'undefined') {
@@ -98,6 +102,21 @@ class SupabaseDataService {
       } catch (e) {
         // ignore
       }
+
+      // Cross-tab synchronization for global system config & payment channels
+      window.addEventListener('storage', (event) => {
+        if (event.key === STORAGE_KEYS.CONFIG && event.newValue) {
+          try {
+            const parsed = JSON.parse(event.newValue);
+            window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: parsed }));
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+      // Initialize real-time cloud Firestore synchronization for system configuration
+      this.initFirestoreConfigSync();
     }
   }
 
@@ -2525,11 +2544,59 @@ class SupabaseDataService {
     return { ...SYSTEM_CONFIG_INITIAL, ...stored };
   }
 
+  getPlans(): SubscriptionPlanDefinition[] {
+    const config = this.getConfig();
+    if (config.planos_detalhes && Array.isArray(config.planos_detalhes) && config.planos_detalhes.length > 0) {
+      return config.planos_detalhes;
+    }
+    return PLANS_DEFINITIONS;
+  }
+
+  savePlans(plans: SubscriptionPlanDefinition[]): void {
+    const config = this.getConfig();
+    const updatedPrecos = { ...config.precos_planos };
+    const updatedTrimestral = { ...config.descontos_config.trimestral };
+    const updatedSemestral = { ...config.descontos_config.semestral };
+    const updatedAnual = { ...config.descontos_config.anual };
+
+    plans.forEach((p) => {
+      if (p.id in updatedPrecos) {
+        (updatedPrecos as any)[p.id] = p.preco_base_mensal;
+      }
+      if (p.descontos) {
+        if (p.id in updatedTrimestral) (updatedTrimestral as any)[p.id] = p.descontos.trimestral || 0;
+        if (p.id in updatedSemestral) (updatedSemestral as any)[p.id] = p.descontos.semestral || 0;
+        if (p.id in updatedAnual) (updatedAnual as any)[p.id] = p.descontos.anual || 0;
+      }
+    });
+
+    const newConfig: SystemConfig = {
+      ...config,
+      planos_detalhes: plans,
+      precos_planos: updatedPrecos,
+      descontos_config: {
+        trimestral: updatedTrimestral,
+        semestral: updatedSemestral,
+        anual: updatedAnual,
+      },
+    };
+    this.saveConfig(newConfig);
+  }
+
   saveConfig(newConfig: SystemConfig): void {
     const merged = { ...SYSTEM_CONFIG_INITIAL, ...newConfig };
     this.setStorage(STORAGE_KEYS.CONFIG, merged);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: merged }));
+      import('./firebase')
+        .then(({ db }) => {
+          import('firebase/firestore').then(({ doc, setDoc }) => {
+            setDoc(doc(db, 'config', 'general'), merged, { merge: true }).catch((err) => {
+              console.warn('[Firestore] Sync de config em segundo plano:', err);
+            });
+          });
+        })
+        .catch(() => {});
     }
     this.logActivity({
       acao: 'Alteração de Configurações Globais',
@@ -2537,14 +2604,105 @@ class SupabaseDataService {
       usuario_id: 'super-admin',
       usuario_nome: 'Super Administrador Geral',
       usuario_role: 'super_admin',
-      detalhes: 'Parâmetros institucionais, rodapé, contactos, dados bancários e identificação do sistema atualizados.',
+      detalhes: 'Parâmetros institucionais, planos de subscrição, dados bancários e identificação do sistema atualizados.',
     });
+  }
+
+  /**
+   * Initializes real-time bidirectional synchronization with Cloud Firestore on doc config/general
+   */
+  initFirestoreConfigSync(): void {
+    if (typeof window === 'undefined' || this.configSyncInitialized) return;
+    this.configSyncInitialized = true;
+
+    import('./firebase')
+      .then(({ db }) => {
+        import('firebase/firestore').then(({ doc, onSnapshot, getDoc, setDoc }) => {
+          const docRef = doc(db, 'config', 'general');
+
+          // Check if document exists initially or seed it
+          getDoc(docRef)
+            .then((snap) => {
+              if (snap.exists()) {
+                const cloudConfig = snap.data() as Partial<SystemConfig>;
+                if (cloudConfig) {
+                  const current = this.getConfig();
+                  const merged = { ...current, ...cloudConfig };
+                  this.setStorage(STORAGE_KEYS.CONFIG, merged);
+                  window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: merged }));
+                }
+              } else {
+                const initial = this.getConfig();
+                setDoc(docRef, initial, { merge: true }).catch(() => {});
+              }
+            })
+            .catch((err) => {
+              console.warn('[Firestore] Leitura inicial de config:', err);
+            });
+
+          // Real-time listener for remote changes from other sessions/admins
+          onSnapshot(
+            docRef,
+            (snap) => {
+              if (snap.exists()) {
+                const cloudConfig = snap.data() as Partial<SystemConfig>;
+                if (cloudConfig) {
+                  const current = this.getConfig();
+                  const merged = { ...current, ...cloudConfig };
+                  this.setStorage(STORAGE_KEYS.CONFIG, merged);
+                  window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: merged }));
+                }
+              }
+            },
+            (err) => {
+              console.warn('[Firestore] Escuta em tempo real de config:', err);
+            }
+          );
+        });
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Explicitly pulls latest configuration and payment channels from Cloud Firestore
+   */
+  async syncConfigWithCloud(): Promise<SystemConfig> {
+    if (typeof window === 'undefined') return this.getConfig();
+    try {
+      const { db } = await import('./firebase');
+      const { doc, getDoc, setDoc } = await import('firebase/firestore');
+      const docRef = doc(db, 'config', 'general');
+      const snap = await getDoc(docRef);
+
+      if (snap.exists()) {
+        const cloudConfig = snap.data() as Partial<SystemConfig>;
+        const current = this.getConfig();
+        const merged = { ...current, ...cloudConfig };
+        this.setStorage(STORAGE_KEYS.CONFIG, merged);
+        window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: merged }));
+        return merged;
+      } else {
+        const current = this.getConfig();
+        await setDoc(docRef, current, { merge: true });
+        return current;
+      }
+    } catch (e) {
+      console.warn('[Firestore] Falha na sincronizacao manual de config:', e);
+      return this.getConfig();
+    }
   }
 
   resetConfig(): SystemConfig {
     this.setStorage(STORAGE_KEYS.CONFIG, SYSTEM_CONFIG_INITIAL);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('mutikukwama:config-updated', { detail: SYSTEM_CONFIG_INITIAL }));
+      import('./firebase')
+        .then(({ db }) => {
+          import('firebase/firestore').then(({ doc, setDoc }) => {
+            setDoc(doc(db, 'config', 'general'), SYSTEM_CONFIG_INITIAL, { merge: true }).catch(() => {});
+          });
+        })
+        .catch(() => {});
     }
     this.logActivity({
       acao: 'Restauro de Configurações Globais',
@@ -2552,7 +2710,7 @@ class SupabaseDataService {
       usuario_id: 'super-admin',
       usuario_nome: 'Super Administrador Geral',
       usuario_role: 'super_admin',
-      detalhes: 'Configurações institucionais, de pagamento e rodapé restauradas para os valores oficiais.',
+      detalhes: 'Configurações institucionais, de planos, pagamento e rodapé restauradas para os valores oficiais.',
     });
     return SYSTEM_CONFIG_INITIAL;
   }

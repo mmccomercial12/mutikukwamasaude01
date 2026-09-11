@@ -303,9 +303,10 @@ export interface SubscriptionPlanDefinition {
   preco_base_mensal: number;
   limite_produtos: number | 'ilimitado';
   produtos_destaque: number | 'ilimitado';
+  limite_destaque?: number | 'ilimitado';
   recursos: string[];
   descontos: {
-    mensal: number;
+    mensal?: number;
     trimestral: number;
     semestral: number;
     anual: number;
@@ -372,10 +373,15 @@ export interface SystemConfig {
   disclaimer_saude?: string;
   multicaixa_express_numero: string;
   multicaixa_entidade: string;
+  multicaixa_tag?: string;
+  multicaixa_instrucao?: string;
   banco_nome: string;
   banco_titular: string;
   banco_iban: string;
   banco_swift: string;
+  banco_tag?: string;
+  canais_pagamento_titulo?: string;
+  canais_pagamento_subtitulo?: string;
   taxa_entrega_padrao: number;
   precos_planos: {
     gratis?: number;
@@ -388,6 +394,7 @@ export interface SystemConfig {
     semestral: { gratis?: number; basico: number; medio: number; avancado: number };
     anual: { gratis?: number; basico: number; medio: number; avancado: number };
   };
+  planos_detalhes?: SubscriptionPlanDefinition[];
 }
 
 export interface AIPrescriptionExtractedItem {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Check,
   Crown,
@@ -15,12 +15,18 @@ import {
   Upload,
   X,
   BadgeCheck,
+  Copy,
+  RefreshCw,
+  Edit3,
+  Save,
+  CheckCircle2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { PLANS_DEFINITIONS } from '../../services/mockData';
 import { supabaseData } from '../../services/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { PlanType, PlanPeriodicity, PaymentMethod } from '../../types';
+import { PlanType, PlanPeriodicity, PaymentMethod, SubscriptionPlanDefinition, SystemConfig } from '../../types';
 
 interface PlansAndPricingViewProps {
   onPlanSelected?: (planId: PlanType) => void;
@@ -35,18 +41,97 @@ export const PlansAndPricingView: React.FC<PlansAndPricingViewProps> = ({ onPlan
   const [comprovativoFileName, setComprovativoFileName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { currentUser, isUnit, isDepot } = useAuth();
-  const { success, warning } = useToast();
-  const config = supabaseData.getConfig();
+  // Sync and edit states for Payment Channels
+  const [isEditChannelsModalOpen, setIsEditChannelsModalOpen] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const { currentUser, isUnit, isDepot, isAdmin, isSuperAdmin } = useAuth();
+  const { success, warning, info } = useToast();
+  const [config, setConfig] = useState(() => supabaseData.getConfig());
+  const [plans, setPlans] = useState<SubscriptionPlanDefinition[]>(() => supabaseData.getPlans());
+
+  // Edit draft config state for modal
+  const [editingConfig, setEditingConfig] = useState<SystemConfig>(() => supabaseData.getConfig());
+
+  useEffect(() => {
+    const handleConfigUpdate = (e?: any) => {
+      const updatedConfig = e?.detail || supabaseData.getConfig();
+      setConfig(updatedConfig);
+      setPlans(supabaseData.getPlans());
+      setLastSyncedAt(new Date());
+    };
+
+    window.addEventListener('mutikukwama:config-updated', handleConfigUpdate);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'mutikukwama_system_config') {
+        handleConfigUpdate();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Initial background sync with Cloud Firestore
+    supabaseData.syncConfigWithCloud().then((cloudConf) => {
+      if (cloudConf) {
+        setConfig(cloudConf);
+        setPlans(supabaseData.getPlans());
+        setLastSyncedAt(new Date());
+      }
+    });
+
+    return () => {
+      window.removeEventListener('mutikukwama:config-updated', handleConfigUpdate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  const handleManualSync = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const synced = await supabaseData.syncConfigWithCloud();
+      setConfig(synced);
+      setPlans(supabaseData.getPlans());
+      setEditingConfig(synced);
+      setLastSyncedAt(new Date());
+      success('Canais oficiais de pagamento e tabela de preços sincronizados com a nuvem!');
+    } catch {
+      warning('Sincronizado com os dados em cache local.');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleCopyText = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    info(`${label} copiado com sucesso!`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handleOpenEditModal = () => {
+    setEditingConfig({ ...config });
+    setIsEditChannelsModalOpen(true);
+  };
+
+  const handleSaveChannels = (e: React.FormEvent) => {
+    e.preventDefault();
+    supabaseData.saveConfig(editingConfig);
+    setConfig(editingConfig);
+    setIsEditChannelsModalOpen(false);
+    success('Canais de pagamento atualizados e sincronizados em toda a plataforma!');
+  };
 
   const getDiscountPercentage = (planType: PlanType, p: PlanPeriodicity): number => {
-    const plan = PLANS_DEFINITIONS.find((x) => x.id === planType);
+    const plan = plans.find((x) => x.id === planType);
     if (!plan) return 0;
     return plan.descontos[p] || 0;
   };
 
   const calculateFinalPrice = (planType: PlanType, p: PlanPeriodicity): { monthly: number; total: number; savings: number } => {
-    const plan = PLANS_DEFINITIONS.find((x) => x.id === planType);
+    const plan = plans.find((x) => x.id === planType);
     if (!plan) return { monthly: 0, total: 0, savings: 0 };
 
     const discount = getDiscountPercentage(planType, p);
@@ -149,8 +234,8 @@ export const PlansAndPricingView: React.FC<PlansAndPricingViewProps> = ({ onPlan
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto">
-          {PLANS_DEFINITIONS.map((plan) => {
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto">
+          {plans.filter((p) => p.id !== 'gratis').map((plan) => {
             const pricing = calculateFinalPrice(plan.id, periodicity);
             const discount = getDiscountPercentage(plan.id, periodicity);
             const isAdvanced = plan.id === 'avancado';
@@ -245,50 +330,358 @@ export const PlansAndPricingView: React.FC<PlansAndPricingViewProps> = ({ onPlan
         </div>
 
         {/* Banking and Multicaixa Transparency Box */}
-        <div className="mt-16 bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 max-w-4xl mx-auto shadow-sm">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#123B7A] flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-[#123B7A]" />
+        <div id="canais-pagamento-angola" className="mt-16 bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 max-w-4xl mx-auto shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#123B7A] flex items-center justify-center shrink-0">
+                <CreditCard className="w-5 h-5 text-[#123B7A]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#123B7A] uppercase tracking-tight">
+                  {config.canais_pagamento_titulo || 'Canais Oficiais de Pagamento em Angola'}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {config.canais_pagamento_subtitulo || 'Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-black text-[#123B7A] uppercase tracking-tight">
-                Canais Oficiais de Pagamento em Angola
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)</p>
+
+            {/* Sync Status & Action Buttons */}
+            <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/70 text-emerald-800 text-[11px] font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Sincronizado</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={isSyncingCloud}
+                title="Sincronizar dados em tempo real com a Cloud Firestore"
+                className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-[#00A878] ${isSyncingCloud ? 'animate-spin' : ''}`} />
+                <span>{isSyncingCloud ? 'A Sincronizar...' : 'Sincronizar'}</span>
+              </button>
+
+              {(isSuperAdmin || isAdmin || currentUser?.role === 'super_admin' || currentUser?.email === 'mmccomercial12@gmail.com') && (
+                <button
+                  type="button"
+                  onClick={handleOpenEditModal}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#123B7A] hover:bg-[#0e2d5c] text-white text-xs font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Editar Canais</span>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
-            <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-2.5">
+            {/* Multicaixa Express (MCX) */}
+            <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-black text-[#123B7A] text-sm uppercase flex items-center gap-2">
                   Multicaixa Express (MCX)
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black text-[10px] uppercase">
-                  Activação Imediata
+                  {config.multicaixa_tag || 'Activação Imediata'}
                 </span>
               </div>
-              <div className="text-xs font-semibold">Entidade Oficial: <strong className="text-slate-900 font-bold">{config.multicaixa_entidade}</strong></div>
-              <div className="text-xs font-semibold">Número de Apoio / MCX: <strong className="text-[#00A878] font-bold">{config.multicaixa_express_numero}</strong></div>
-              <div className="text-slate-500 text-[11px] font-medium leading-relaxed">Validação automática por cruzamento do número de envio ou ID de transacção.</div>
+
+              <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/70">
+                <div className="text-xs">
+                  <span className="text-slate-500 text-[11px] block">Entidade Oficial:</span>
+                  <strong className="text-slate-900 font-mono font-bold text-sm">
+                    {config.multicaixa_entidade || '99024'}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(config.multicaixa_entidade || '99024', 'Entidade')}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#00A878] hover:bg-slate-50 transition-colors"
+                  title="Copiar Entidade"
+                >
+                  {copiedField === 'Entidade' ? <CheckCircle2 className="w-4 h-4 text-[#00A878]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/70">
+                <div className="text-xs">
+                  <span className="text-slate-500 text-[11px] block">Número de Apoio / MCX:</span>
+                  <strong className="text-[#00A878] font-mono font-bold text-sm">
+                    {config.multicaixa_express_numero || '+244 927 042 499'}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(config.multicaixa_express_numero || '+244 927 042 499', 'Número MCX')}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#00A878] hover:bg-slate-50 transition-colors"
+                  title="Copiar Número MCX"
+                >
+                  {copiedField === 'Número MCX' ? <CheckCircle2 className="w-4 h-4 text-[#00A878]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <div className="text-slate-500 text-[11px] font-medium leading-relaxed pt-1">
+                {config.multicaixa_instrucao || 'Validação automática por cruzamento do número de envio ou ID de transacção.'}
+              </div>
             </div>
 
-            <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-2.5">
+            {/* Transferência BAI */}
+            <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-black text-[#123B7A] text-sm uppercase flex items-center gap-2">
-                  Transferência BAI ({config.banco_nome})
+                  Transferência BAI ({config.banco_nome || 'Banco Angolano de Investimentos'})
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-[#123B7A] font-black text-[10px] uppercase">
-                  Bancário
+                  {config.banco_tag || 'Bancário'}
                 </span>
               </div>
-              <div className="text-xs font-semibold">Titular: <strong className="text-slate-900 font-bold">{config.banco_titular}</strong></div>
-              <div className="text-xs font-semibold">IBAN: <strong className="font-mono text-[#00A878] font-bold text-xs">{config.banco_iban}</strong></div>
-              <div className="text-xs font-semibold">SWIFT: <strong className="font-mono text-slate-700">{config.banco_swift}</strong></div>
+
+              <div className="p-2 rounded-xl bg-white border border-slate-200/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] block">Titular da Conta:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(config.banco_titular || 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA', 'Titular')}
+                    className="p-1 text-slate-400 hover:text-[#00A878]"
+                    title="Copiar Titular"
+                  >
+                    {copiedField === 'Titular' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00A878]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <strong className="text-slate-900 font-bold text-xs">
+                  {config.banco_titular || 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA'}
+                </strong>
+              </div>
+
+              <div className="p-2 rounded-xl bg-white border border-slate-200/70">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 text-[11px] block">IBAN Angolano:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(config.banco_iban || 'AO06 0040 0000 1234 5678 9012 3', 'IBAN')}
+                    className="p-1 text-slate-400 hover:text-[#00A878]"
+                    title="Copiar IBAN"
+                  >
+                    {copiedField === 'IBAN' ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00A878]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <strong className="font-mono text-[#00A878] font-black text-xs block break-all">
+                  {config.banco_iban || 'AO06 0040 0000 1234 5678 9012 3'}
+                </strong>
+              </div>
+
+              <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/70">
+                <div className="text-xs">
+                  <span className="text-slate-500 text-[11px] block">Código SWIFT / BIC:</span>
+                  <strong className="font-mono text-slate-800 font-bold text-xs">
+                    {config.banco_swift || 'BAIAOLLU'}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(config.banco_swift || 'BAIAOLLU', 'SWIFT')}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#00A878] hover:bg-slate-50 transition-colors"
+                  title="Copiar SWIFT"
+                >
+                  {copiedField === 'SWIFT' ? <CheckCircle2 className="w-4 h-4 text-[#00A878]" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal de Edição Direta dos Canais de Pagamento (Admin & Super Admin) */}
+      {isEditChannelsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="bg-white border border-slate-200/80 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl text-slate-800 animate-in zoom-in-95 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-[#00A878] flex items-center justify-center">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#123B7A] uppercase tracking-tight">
+                    Editar Canais Oficiais de Pagamento
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    As alterações feitas aqui serão sincronizadas instantaneamente em toda a plataforma e na Cloud Firestore.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditChannelsModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveChannels} className="mt-6 space-y-5">
+              {/* Títulos Gerais */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <h4 className="text-xs font-black text-[#123B7A] uppercase tracking-wider">
+                  Cabeçalho da Secção
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Título Principal</label>
+                    <input
+                      type="text"
+                      value={editingConfig.canais_pagamento_titulo || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, canais_pagamento_titulo: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#00A878]"
+                      placeholder="Canais Oficiais de Pagamento em Angola"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Subtítulo Informativo</label>
+                    <input
+                      type="text"
+                      value={editingConfig.canais_pagamento_subtitulo || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, canais_pagamento_subtitulo: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#00A878]"
+                      placeholder="Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Multicaixa Express */}
+              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider">
+                    Multicaixa Express (MCX)
+                  </h4>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                    EMIS Angola
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Entidade Oficial</label>
+                    <input
+                      type="text"
+                      value={editingConfig.multicaixa_entidade || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, multicaixa_entidade: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                      placeholder="99024"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Número de Apoio / MCX</label>
+                    <input
+                      type="text"
+                      value={editingConfig.multicaixa_express_numero || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, multicaixa_express_numero: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                      placeholder="+244 927 042 499"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Tag do Selo</label>
+                    <input
+                      type="text"
+                      value={editingConfig.multicaixa_tag || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, multicaixa_tag: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#00A878]"
+                      placeholder="Activação Imediata"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1 text-xs">Instrução de Validação</label>
+                  <input
+                    type="text"
+                    value={editingConfig.multicaixa_instrucao || ''}
+                    onChange={(e) => setEditingConfig({ ...editingConfig, multicaixa_instrucao: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#00A878]"
+                    placeholder="Validação automática por cruzamento do número de envio ou ID de transacção."
+                  />
+                </div>
+              </div>
+
+              {/* Transferência BAI */}
+              <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-[#123B7A] uppercase tracking-wider">
+                    Transferência Bancária (BAI)
+                  </h4>
+                  <span className="text-[10px] font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full">
+                    Banco BAI
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Nome da Instituição</label>
+                    <input
+                      type="text"
+                      value={editingConfig.banco_nome || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, banco_nome: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#00A878]"
+                      placeholder="BAI — Banco Angolano de Investimentos"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Titular da Conta</label>
+                    <input
+                      type="text"
+                      value={editingConfig.banco_titular || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, banco_titular: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-[#00A878]"
+                      placeholder="MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="sm:col-span-2">
+                    <label className="font-bold text-slate-700 block mb-1">IBAN Angolano</label>
+                    <input
+                      type="text"
+                      value={editingConfig.banco_iban || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, banco_iban: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                      placeholder="AO06 0040 0000 1234 5678 9012 3"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Código SWIFT / BIC</label>
+                    <input
+                      type="text"
+                      value={editingConfig.banco_swift || ''}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, banco_swift: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                      placeholder="BAIAOLLU"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditChannelsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 shadow-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Salvar e Sincronizar Tudo</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Subscription Checkout Modal */}
       {selectedPlanForCheckout && (

@@ -148,6 +148,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [systemConfig, setSystemConfig] = useState(() => supabaseData.getConfig());
   const [pendingActivationUnit, setPendingActivationUnit] = useState<any | null>(null);
 
+  useEffect(() => {
+    const handleConfigUpdate = (e?: any) => {
+      setSystemConfig(e?.detail || supabaseData.getConfig());
+    };
+    window.addEventListener('mutikukwama:config-updated', handleConfigUpdate);
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'mutikukwama_system_config') handleConfigUpdate();
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('mutikukwama:config-updated', handleConfigUpdate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
   // Password evaluation for registration
   const passwordEvaluation = evaluatePasswordStrength(regPassword);
   const passwordsMatch = regPassword.length > 0 && regPassword === confirmPassword;
@@ -1770,12 +1785,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                             <p><strong>Titular:</strong> {systemConfig.banco_titular || 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA'}</p>
                             <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-2 mt-1.5">
                               <span className="font-mono font-bold text-xs text-slate-800 truncate">
-                                {systemConfig.banco_iban || 'AO06 0040 0000 8291 0001 1012 3'}
+                                {systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3'}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(systemConfig.banco_iban || 'AO06 0040 0000 8291 0001 1012 3');
+                                  navigator.clipboard.writeText(systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3');
                                   setCopiedIban(true);
                                   info('IBAN copiado!');
                                   setTimeout(() => setCopiedIban(false), 2000);

@@ -55,6 +55,9 @@ import {
   Image as ImageIcon,
   FileImage,
   FileCheck,
+  Crown,
+  BadgeCheck,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -72,6 +75,7 @@ import {
   UserRole,
   SponsorPartner,
   SponsorTier,
+  SubscriptionPlanDefinition,
 } from '../../types';
 import { SponsorsCarousel } from '../home/SponsorsCarousel';
 import { MinsaDocumentModal } from '../minsa/MinsaDocumentModal';
@@ -178,7 +182,11 @@ export const AdminSuperAdminDashboard: React.FC = () => {
 
   // System Config State
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => supabaseData.getConfig());
-  const [configSubTab, setConfigSubTab] = useState<'geral_rodape' | 'patrocinadores' | 'pagamentos'>('geral_rodape');
+  const [configSubTab, setConfigSubTab] = useState<'planos_saas' | 'pagamentos' | 'geral_rodape' | 'patrocinadores'>('planos_saas');
+  const [plansList, setPlansList] = useState<SubscriptionPlanDefinition[]>(() => supabaseData.getPlans());
+  const [activePlanEditIndex, setActivePlanEditIndex] = useState<number>(0);
+  const [previewPeriodicity, setPreviewPeriodicity] = useState<PlanPeriodicity>('anual');
+  const [newFeatureText, setNewFeatureText] = useState<string>('');
 
   // Form states for New Unit
   const [unitForm, setUnitForm] = useState({
@@ -800,10 +808,84 @@ export const AdminSuperAdminDashboard: React.FC = () => {
     setUserToDelete(null);
   };
 
+  const handleSavePlans = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    supabaseData.savePlans(plansList);
+    setSystemConfig(supabaseData.getConfig());
+    success('Planos SaaS, preços, limites e recursos salvos com sucesso!');
+  };
+
+  const handleResetPlans = () => {
+    supabaseData.savePlans(PLANS_DEFINITIONS);
+    setPlansList(PLANS_DEFINITIONS);
+    setSystemConfig(supabaseData.getConfig());
+    success('Planos de subscrição restaurados para os valores padrão oficiais.');
+  };
+
+  const updatePlanField = <K extends keyof SubscriptionPlanDefinition>(
+    index: number,
+    field: K,
+    value: SubscriptionPlanDefinition[K]
+  ) => {
+    setPlansList((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const updatePlanDiscount = (index: number, p: 'trimestral' | 'semestral' | 'anual', value: number) => {
+    setPlansList((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        descontos: {
+          ...copy[index].descontos,
+          [p]: value,
+        },
+      };
+      return copy;
+    });
+  };
+
+  const addFeatureToPlan = (index: number) => {
+    if (!newFeatureText.trim()) return;
+    setPlansList((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        recursos: [...copy[index].recursos, newFeatureText.trim()],
+      };
+      return copy;
+    });
+    setNewFeatureText('');
+  };
+
+  const removeFeatureFromPlan = (planIndex: number, featureIndex: number) => {
+    setPlansList((prev) => {
+      const copy = [...prev];
+      copy[planIndex] = {
+        ...copy[planIndex],
+        recursos: copy[planIndex].recursos.filter((_, i) => i !== featureIndex),
+      };
+      return copy;
+    });
+  };
+
+  const updateFeatureText = (planIndex: number, featureIndex: number, text: string) => {
+    setPlansList((prev) => {
+      const copy = [...prev];
+      const updatedRecursos = [...copy[planIndex].recursos];
+      updatedRecursos[featureIndex] = text;
+      copy[planIndex] = { ...copy[planIndex], recursos: updatedRecursos };
+      return copy;
+    });
+  };
+
   const handleSaveConfig = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     supabaseData.saveConfig(systemConfig);
-    success('Configurações institucionais, dados do rodapé e parâmetros salvos com sucesso!');
+    success('Configurações institucionais, dados bancários e rodapé salvos com sucesso!');
   };
 
   const handleResetConfig = () => {
@@ -813,6 +895,7 @@ export const AdminSuperAdminDashboard: React.FC = () => {
   const confirmResetConfig = () => {
     const res = supabaseData.resetConfig();
     setSystemConfig(res);
+    setPlansList(supabaseData.getPlans());
     success('Configurações institucionais e do rodapé restauradas para o padrão oficial.');
     setIsResetConfigModalOpen(false);
   };
@@ -1082,6 +1165,21 @@ export const AdminSuperAdminDashboard: React.FC = () => {
           >
             <Activity className="w-4 h-4" />
             <span>Auditoria & Logs ({allLogs.length})</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('configuracoes');
+              setConfigSubTab('planos_saas');
+            }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'configuracoes' && configSubTab === 'planos_saas'
+                ? 'bg-[#123B7A] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Crown className="w-4 h-4 text-amber-500" />
+            <span>Planos SaaS & Preçário</span>
           </button>
 
           <button
@@ -2657,6 +2755,32 @@ export const AdminSuperAdminDashboard: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setConfigSubTab('planos_saas')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    configSubTab === 'planos_saas'
+                      ? 'bg-[#123B7A] text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  <span>Planos SaaS & Preçário</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfigSubTab('pagamentos')}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    configSubTab === 'pagamentos'
+                      ? 'bg-[#123B7A] text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Canais de Pagamento & Bancos</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setConfigSubTab('geral_rodape')}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
                     configSubTab === 'geral_rodape'
@@ -2675,19 +2799,6 @@ export const AdminSuperAdminDashboard: React.FC = () => {
                 >
                   <HeartHandshake className="w-4 h-4 text-slate-500" />
                   <span>Empresas Apoiantes & Patrocinadoras ({activeSponsors.length}/{allSponsors.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setConfigSubTab('pagamentos')}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                    configSubTab === 'pagamentos'
-                      ? 'bg-[#123B7A] text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Parâmetros de Pagamento & Bancos</span>
                 </button>
               </div>
 
@@ -3237,206 +3348,762 @@ export const AdminSuperAdminDashboard: React.FC = () => {
               </form>
             )}
 
-            {/* SUBTAB 3: PARÂMETROS BANCÁRIOS & MULTICAIXA */}
+            {/* SUBTAB: PLANOS SAAS & PREÇÁRIO */}
+            {configSubTab === 'planos_saas' && (
+              <div className="space-y-6">
+                {/* Header Card with Quick Action */}
+                <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+                          <Crown className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="inline-block px-3 py-1 bg-[#E8F5F1] text-[#00A878] text-[10px] font-black rounded-full uppercase tracking-wider">
+                            Super Admin • Gestão Comercial
+                          </span>
+                          <h2 className="text-xl font-black text-[#123B7A] uppercase tracking-tight mt-0.5">
+                            Planos de Subscrição SaaS & Tabela de Preçário
+                          </h2>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-2 max-w-3xl">
+                        Edite nomes, selos promocionais de destaque, descrições, preços mensais base, descontos por periodicidade, limites operacionais e a lista completa de recursos incluídos para cada plano. As alterações refletem-se imediatamente na página de Planos e Preços e no processo de registo.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetPlans}
+                        className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2"
+                        title="Restaurar planos oficiais padrão"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Restaurar Padrão</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSavePlans}
+                        className="px-6 py-2.5 rounded-xl bg-[#00A878] hover:bg-[#008f66] text-white text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Salvar Todos os Planos</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Plan Selector Tabs */}
+                  <div className="mt-6 pt-6 border-t border-slate-100 flex flex-wrap gap-2">
+                    {plansList.map((plan, idx) => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setActivePlanEditIndex(idx)}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer border ${
+                          activePlanEditIndex === idx
+                            ? 'bg-[#123B7A] text-white border-[#123B7A] shadow-sm'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-[#00A878]" />
+                        <span>{plan.nome}</span>
+                        {plan.destaque_badge && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                            activePlanEditIndex === idx ? 'bg-amber-400 text-slate-900' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {plan.destaque_badge}
+                          </span>
+                        )}
+                        <span className="text-[11px] opacity-75 ml-1">
+                          ({plan.preco_base_mensal.toLocaleString('pt-AO')} AOA/mês)
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Main Plan Editor + Live Preview */}
+                {plansList[activePlanEditIndex] && (() => {
+                  const currentPlan = plansList[activePlanEditIndex];
+                  const currentIdx = activePlanEditIndex;
+
+                  // Price calculation for preview
+                  const baseMonthly = currentPlan.preco_base_mensal;
+                  let months = 1;
+                  let discountPercent = 0;
+                  if (previewPeriodicity === 'trimestral') {
+                    months = 3;
+                    discountPercent = currentPlan.descontos.trimestral || 0;
+                  } else if (previewPeriodicity === 'semestral') {
+                    months = 6;
+                    discountPercent = currentPlan.descontos.semestral || 0;
+                  } else if (previewPeriodicity === 'anual') {
+                    months = 12;
+                    discountPercent = currentPlan.descontos.anual || 0;
+                  }
+
+                  const rawTotal = baseMonthly * months;
+                  const discountValue = Math.round(rawTotal * (discountPercent / 100));
+                  const finalTotal = rawTotal - discountValue;
+                  const monthlyEquiv = Math.round(finalTotal / months);
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Left: Form Fields (7 cols) */}
+                      <div className="lg:col-span-7 space-y-6">
+                        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                ID do Plano: {currentPlan.id}
+                              </span>
+                              <h3 className="text-base font-black text-[#123B7A] uppercase tracking-tight mt-1">
+                                Parâmetros Principais do {currentPlan.nome}
+                              </h3>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleSavePlans}
+                              className="px-4 py-2 rounded-xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>Salvar</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="font-bold text-slate-700">Nome Oficial do Plano</label>
+                              <input
+                                type="text"
+                                value={currentPlan.nome}
+                                onChange={(e) => updatePlanField(currentIdx, 'nome', e.target.value)}
+                                placeholder="Ex: Plano Médio"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="font-bold text-slate-700 flex items-center justify-between">
+                                <span>Selo / Badge Promocional de Destaque</span>
+                                <span className="text-[10px] text-slate-400 font-normal">(Deixe em branco se não quiser selo no topo)</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={currentPlan.destaque_badge || ''}
+                                onChange={(e) => updatePlanField(currentIdx, 'destaque_badge', e.target.value)}
+                                placeholder="Ex: ⭐ Mais Escolhido ou 🏆 Solução Completa"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="font-bold text-slate-700">Descrição Comercial Resumida</label>
+                              <textarea
+                                rows={2}
+                                value={currentPlan.descricao}
+                                onChange={(e) => updatePlanField(currentIdx, 'descricao', e.target.value)}
+                                placeholder="Ex: Perfil público verificado • Até 200 produtos • Pedidos por WhatsApp"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="font-bold text-slate-700">Preço Base Mensal (AOA/mês)</label>
+                              <input
+                                type="number"
+                                value={currentPlan.preco_base_mensal}
+                                onChange={(e) => updatePlanField(currentIdx, 'preco_base_mensal', parseInt(e.target.value, 10) || 0)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-black text-sm focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="font-bold text-slate-700">Limite de Produtos</label>
+                              <input
+                                type="text"
+                                value={String(currentPlan.limite_produtos)}
+                                onChange={(e) => {
+                                  const val = e.target.value.toLowerCase() === 'ilimitado' ? 'ilimitado' : (parseInt(e.target.value, 10) || e.target.value);
+                                  updatePlanField(currentIdx, 'limite_produtos', val);
+                                }}
+                                placeholder="Ex: 200 ou ilimitado"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+
+                            <div className="space-y-1 sm:col-span-2">
+                              <label className="font-bold text-slate-700">Produtos em Destaque na Busca</label>
+                              <input
+                                type="text"
+                                value={String(currentPlan.limite_destaque)}
+                                onChange={(e) => {
+                                  const val = e.target.value.toLowerCase() === 'ilimitado' ? 'ilimitado' : (parseInt(e.target.value, 10) || e.target.value);
+                                  updatePlanField(currentIdx, 'limite_destaque', val);
+                                }}
+                                placeholder="Ex: 5, 20 ou ilimitado"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Discount Rates Section */}
+                          <div className="pt-4 border-t border-slate-100">
+                            <h4 className="font-black text-xs text-[#123B7A] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Descontos Promocionais por Ciclo (%)</span>
+                            </h4>
+                            <p className="text-[11px] text-slate-500 font-medium mb-3">
+                              Defina a percentagem de desconto aplicada para pagamentos trimestrais, semestrais e anuais.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="space-y-1">
+                                <label className="font-bold text-slate-700 text-[11px]">Trimestral (%)</label>
+                                <input
+                                  type="number"
+                                  value={currentPlan.descontos?.trimestral ?? 0}
+                                  onChange={(e) => updatePlanDiscount(currentIdx, 'trimestral', parseInt(e.target.value, 10) || 0)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="font-bold text-slate-700 text-[11px]">Semestral (%)</label>
+                                <input
+                                  type="number"
+                                  value={currentPlan.descontos?.semestral ?? 0}
+                                  onChange={(e) => updatePlanDiscount(currentIdx, 'semestral', parseInt(e.target.value, 10) || 0)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="font-bold text-slate-700 text-[11px]">Anual (%)</label>
+                                <input
+                                  type="number"
+                                  value={currentPlan.descontos?.anual ?? 0}
+                                  onChange={(e) => updatePlanDiscount(currentIdx, 'anual', parseInt(e.target.value, 10) || 0)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Features List Section */}
+                          <div className="pt-4 border-t border-slate-100 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="font-black text-xs text-[#123B7A] uppercase tracking-wider flex items-center gap-1.5">
+                                  <BadgeCheck className="w-4 h-4 text-[#00A878]" />
+                                  <span>Recursos Incluídos ({currentPlan.recursos.length} itens)</span>
+                                </h4>
+                                <p className="text-[11px] text-slate-500 font-medium">
+                                  Adicione, edite ou remova as linhas exibidas nos cartões de preço com os vistos verdes.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              {currentPlan.recursos.map((featureText, featIdx) => (
+                                <div key={featIdx} className="flex items-center gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-[#E8F5F1] text-[#00A878] flex items-center justify-center shrink-0">
+                                    <Check className="w-3 h-3" />
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={featureText}
+                                    onChange={(e) => updateFeatureText(currentIdx, featIdx, e.target.value)}
+                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#00A878]"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeFeatureFromPlan(currentIdx, featIdx)}
+                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                                    title="Remover este recurso"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Add New Feature Row */}
+                            <div className="pt-2 flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={newFeatureText}
+                                onChange={(e) => setNewFeatureText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addFeatureToPlan(currentIdx);
+                                  }
+                                }}
+                                placeholder="Digite o novo recurso e pressione Enter ou clique em Adicionar..."
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#00A878]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => addFeatureToPlan(currentIdx)}
+                                className="px-4 py-2.5 rounded-xl bg-[#123B7A] hover:bg-[#0e2f63] text-white text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Adicionar</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-100 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={handleSavePlans}
+                              className="px-6 py-3 rounded-2xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                            >
+                              <Save className="w-4 h-4" />
+                              <span>Salvar Alterações dos Planos</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Real-time Live Preview (5 cols) */}
+                      <div className="lg:col-span-5 space-y-4">
+                        <div className="sticky top-6">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 flex items-center gap-1.5">
+                              <Eye className="w-3 h-3 text-[#00A878]" />
+                              <span>Pré-visualização em Tempo Real</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              Como o cliente verá no site
+                            </span>
+                          </div>
+
+                          {/* Cycle Selector for Preview */}
+                          <div className="bg-white border border-slate-200 rounded-2xl p-1.5 shadow-sm mb-4 flex items-center justify-between gap-1 text-[11px] font-bold">
+                            {(['mensal', 'trimestral', 'semestral', 'anual'] as PlanPeriodicity[]).map((p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setPreviewPeriodicity(p)}
+                                className={`flex-1 py-1.5 px-2 rounded-xl text-center capitalize transition-all cursor-pointer ${
+                                  previewPeriodicity === p
+                                    ? 'bg-[#00A878] text-white shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* The Plan Card Replica (exact match to PlansAndPricingView) */}
+                          <div className="relative bg-white rounded-3xl border-2 border-[#123B7A] shadow-xl p-6 overflow-hidden">
+                            {currentPlan.destaque_badge && (
+                              <div className="absolute top-0 right-0 bg-amber-400 text-slate-900 font-black text-[10px] uppercase tracking-wider py-1.5 px-4 rounded-bl-2xl shadow-sm">
+                                {currentPlan.destaque_badge}
+                              </div>
+                            )}
+
+                            <div className="space-y-4">
+                              <div>
+                                <h4 className="text-xl font-black text-[#123B7A] tracking-tight">
+                                  {currentPlan.nome}
+                                </h4>
+                                <p className="text-xs text-slate-500 font-medium mt-1 leading-relaxed">
+                                  {currentPlan.descricao}
+                                </p>
+                              </div>
+
+                              {/* Price Box */}
+                              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-1">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-2xl sm:text-3xl font-black text-[#123B7A]">
+                                    {finalTotal.toLocaleString('pt-AO')}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-500">
+                                    AOA / {previewPeriodicity}
+                                  </span>
+                                </div>
+
+                                {previewPeriodicity !== 'mensal' && discountPercent > 0 ? (
+                                  <div className="pt-1 flex flex-col gap-0.5">
+                                    <span className="text-xs font-bold text-[#00A878]">
+                                      Equivalente a {monthlyEquiv.toLocaleString('pt-AO')} AOA/mês
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-slate-400 line-through">
+                                      {rawTotal.toLocaleString('pt-AO')} AOA (Poupou {discountValue.toLocaleString('pt-AO')} AOA)
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] font-semibold text-slate-400 block pt-1">
+                                    Facturado {previewPeriodicity}mente
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Included Features List */}
+                              <div className="space-y-2 pt-2 border-t border-slate-100">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                                  O que está incluído:
+                                </span>
+                                <ul className="space-y-2 text-xs text-slate-700">
+                                  {currentPlan.recursos.map((feat, i) => (
+                                    <li key={i} className="flex items-start gap-2.5">
+                                      <CheckCircle2 className="w-4 h-4 text-[#00A878] shrink-0 mt-0.5" />
+                                      <span className="leading-tight">{feat}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+
+                              <div className="pt-4 border-t border-slate-100">
+                                <div className="w-full py-3 rounded-2xl bg-[#00A878] text-white font-black text-xs uppercase tracking-wider text-center shadow-md">
+                                  Subscrever Plano Agora
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* SUBTAB: PARÂMETROS BANCÁRIOS & CANAIS DE PAGAMENTO */}
             {configSubTab === 'pagamentos' && (
-              <form onSubmit={handleSaveConfig} className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 max-w-4xl">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div>
-                    <span className="inline-block px-3 py-1 bg-[#E8F5F1] text-[#00A878] text-[10px] font-black rounded-full uppercase tracking-wider">
-                      Configurações Nacionais
-                    </span>
-                    <h2 className="text-lg font-black text-[#123B7A] uppercase tracking-tight mt-1">
-                      Parâmetros Oficiais de Pagamento & Contas em Angola
-                    </h2>
-                    <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                      Contas bancárias e credenciais para liquidação de subscrições e encomendas de medicamentos.
-                    </p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Salvar</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700">Multicaixa Express - Número / Telemóvel</label>
-                    <input
-                      type="text"
-                      value={systemConfig.multicaixa_express_numero}
-                      onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_express_numero: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700">Multicaixa - Entidade Oficial</label>
-                    <input
-                      type="text"
-                      value={systemConfig.multicaixa_entidade}
-                      onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_entidade: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
-                    />
-                  </div>
-
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="font-bold text-slate-700">Banco & IBAN Angolano (BAI / BFA)</label>
-                    <input
-                      type="text"
-                      value={systemConfig.banco_iban}
-                      onChange={(e) => setSystemConfig({ ...systemConfig, banco_iban: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-mono focus:outline-none focus:border-[#00A878]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700">Titular da Conta Bancária</label>
-                    <input
-                      type="text"
-                      value={systemConfig.banco_titular}
-                      onChange={(e) => setSystemConfig({ ...systemConfig, banco_titular: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-bold text-slate-700">Taxa de Entrega Padrão (AOA)</label>
-                    <input
-                      type="number"
-                      value={systemConfig.taxa_entrega_padrao}
-                      onChange={(e) => setSystemConfig({ ...systemConfig, taxa_entrega_padrao: parseInt(e.target.value, 10) || 0 })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
-                    />
-                  </div>
-
-                  {/* Preços Oficiais dos Planos SaaS */}
-                  <div className="sm:col-span-2 pt-4 border-t border-slate-200">
-                    <h3 className="font-black text-sm text-[#123B7A] uppercase tracking-tight mb-1 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-[#00A878]" />
-                      <span>Preços Oficiais de Subscrição Mensal (AOA/mês)</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium mb-3">
-                      Estes valores definem os preços exibidos no formulário de criação de conta de novas farmácias e unidades de saúde.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 text-[11px]">Plano BÁSICO (AOA/mês)</label>
-                        <input
-                          type="number"
-                          value={systemConfig.precos_planos?.basico ?? 15000}
-                          onChange={(e) =>
-                            setSystemConfig({
-                              ...systemConfig,
-                              precos_planos: {
-                                ...systemConfig.precos_planos,
-                                basico: parseInt(e.target.value, 10) || 0,
-                              },
-                            })
-                          }
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#00A878] font-bold"
-                        />
+              <div className="space-y-6">
+                {/* Top Announcement & Action Bar */}
+                <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-[#E8F5F1] text-[#00A878] flex items-center justify-center border border-[#00A878]/30">
+                          <CreditCard className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="inline-block px-3 py-1 bg-[#E8F5F1] text-[#00A878] text-[10px] font-black rounded-full uppercase tracking-wider">
+                            Super Admin • Sistema Bancário Nacional
+                          </span>
+                          <h2 className="text-xl font-black text-[#123B7A] uppercase tracking-tight mt-0.5">
+                            Canais Oficiais de Pagamento & Bancos em Angola
+                          </h2>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 text-[11px]">Plano MÉDIO (AOA/mês)</label>
-                        <input
-                          type="number"
-                          value={systemConfig.precos_planos?.medio ?? 35000}
-                          onChange={(e) =>
-                            setSystemConfig({
-                              ...systemConfig,
-                              precos_planos: {
-                                ...systemConfig.precos_planos,
-                                medio: parseInt(e.target.value, 10) || 0,
-                              },
-                            })
-                          }
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#00A878] font-bold"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 text-[11px]">Plano AVANÇADO (AOA/mês)</label>
-                        <input
-                          type="number"
-                          value={systemConfig.precos_planos?.avancado ?? 75000}
-                          onChange={(e) =>
-                            setSystemConfig({
-                              ...systemConfig,
-                              precos_planos: {
-                                ...systemConfig.precos_planos,
-                                avancado: parseInt(e.target.value, 10) || 0,
-                              },
-                            })
-                          }
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#00A878] font-bold"
-                        />
-                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-2 max-w-3xl">
+                        Gerencie as credenciais bancárias oficiais exibidas na página pública de Preçário, nos formulários de liquidação de subscrições SaaS de farmácias e no checkout de medicamentos.
+                      </p>
                     </div>
-                  </div>
 
-                  {/* Descontos Promocionais por Período */}
-                  <div className="sm:col-span-2 pt-4 border-t border-slate-200">
-                    <h3 className="font-black text-sm text-[#123B7A] uppercase tracking-tight mb-1 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span>Descontos Promocionais por Periodicidade (%)</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium mb-3">
-                      Percentagem de desconto aplicada no ato de inscrição para pagamentos trimestrais e anuais.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 text-[11px]">Desconto Período TRIMESTRAL (%)</label>
-                        <input
-                          type="number"
-                          value={(systemConfig.descontos_config?.trimestral as any)?.basico ?? 5}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10) || 0;
-                            setSystemConfig({
-                              ...systemConfig,
-                              descontos_config: {
-                                ...systemConfig.descontos_config,
-                                trimestral: { basico: val, medio: val, avancado: val },
-                              },
-                            });
-                          }}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#00A878] font-bold"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="font-bold text-slate-700 text-[11px]">Desconto Período ANUAL (%)</label>
-                        <input
-                          type="number"
-                          value={(systemConfig.descontos_config?.anual as any)?.basico ?? 20}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10) || 0;
-                            setSystemConfig({
-                              ...systemConfig,
-                              descontos_config: {
-                                ...systemConfig.descontos_config,
-                                anual: { basico: val, medio: val, avancado: val },
-                              },
-                            });
-                          }}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-slate-800 focus:outline-none focus:border-[#00A878] font-bold"
-                        />
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleResetConfig}
+                        className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-2"
+                        title="Restaurar parâmetros oficiais padrão"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Restaurar Padrão</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveConfig}
+                        className="px-6 py-2.5 rounded-xl bg-[#00A878] hover:bg-[#008f66] text-white text-xs font-black uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Salvar Parâmetros</span>
+                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100">
-                  <button
-                    type="submit"
-                    className="px-6 py-3 rounded-2xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Salvar Parâmetros Bancários</span>
-                  </button>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Left: Configuration Form (7 cols) */}
+                  <div className="lg:col-span-7">
+                    <form onSubmit={handleSaveConfig} className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                      {/* Section 1: Titles and General Text */}
+                      <div className="space-y-4">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-black text-[#123B7A] uppercase tracking-tight">
+                            1. Títulos da Secção de Pagamento
+                          </h3>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Texto de cabeçalho apresentado acima das opções de pagamento.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 text-xs">
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Título Principal da Secção</label>
+                            <input
+                              type="text"
+                              value={systemConfig.canais_pagamento_titulo || 'Canais Oficiais de Pagamento em Angola'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, canais_pagamento_titulo: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Subtítulo Informativo de Segurança</label>
+                            <input
+                              type="text"
+                              value={systemConfig.canais_pagamento_subtitulo || 'Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, canais_pagamento_subtitulo: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Multicaixa Express (MCX) */}
+                      <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-black text-[#123B7A] uppercase tracking-tight flex items-center gap-2">
+                              <Smartphone className="w-4 h-4 text-[#00A878]" />
+                              <span>2. Multicaixa Express (MCX) & Pagamento por Referência</span>
+                            </h3>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              Configurações da integração com a rede EMIS.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Selo / Tag do Cartão</label>
+                            <input
+                              type="text"
+                              value={systemConfig.multicaixa_tag || 'Activação Imediata'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_tag: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Entidade Oficial EMIS</label>
+                            <input
+                              type="text"
+                              value={systemConfig.multicaixa_entidade || '99024'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_entidade: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="font-bold text-slate-700">Número de Envio / MCX de Apoio</label>
+                            <input
+                              type="text"
+                              value={systemConfig.multicaixa_express_numero || '+244 927 042 499'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_express_numero: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="font-bold text-slate-700">Instrução Informativa / Validação</label>
+                            <textarea
+                              rows={2}
+                              value={systemConfig.multicaixa_instrucao || 'Validação automática por cruzamento do número de envio ou ID de transacção.'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, multicaixa_instrucao: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Section 3: Bank Transfer / BAI */}
+                      <div className="space-y-4 pt-4 border-t border-slate-100">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-sm font-black text-[#123B7A] uppercase tracking-tight flex items-center gap-2">
+                            <Landmark className="w-4 h-4 text-[#123B7A]" />
+                            <span>3. Transferência Bancária / Depósito Nacional</span>
+                          </h3>
+                          <p className="text-[11px] text-slate-500 font-medium">
+                            Contas bancárias oficiais para liquidações por IBAN e SWIFT.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Nome da Instituição Bancária</label>
+                            <input
+                              type="text"
+                              value={systemConfig.banco_nome || 'BAI — Banco Angolano de Investimentos'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, banco_nome: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Selo / Tag do Cartão Bancário</label>
+                            <input
+                              type="text"
+                              value={systemConfig.banco_tag || 'Bancário'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, banco_tag: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="font-bold text-slate-700">Titular da Conta Bancária</label>
+                            <input
+                              type="text"
+                              value={systemConfig.banco_titular || 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, banco_titular: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1 sm:col-span-2">
+                            <label className="font-bold text-slate-700">IBAN Angolano (AO06...)</label>
+                            <input
+                              type="text"
+                              value={systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, banco_iban: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-mono font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Código SWIFT / BIC</label>
+                            <input
+                              type="text"
+                              value={systemConfig.banco_swift || 'BAIAOLLU'}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, banco_swift: e.target.value })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-mono focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="font-bold text-slate-700">Taxa de Entrega Padrão de Medicamentos (AOA)</label>
+                            <input
+                              type="number"
+                              value={systemConfig.taxa_entrega_padrao ?? 1500}
+                              onChange={(e) => setSystemConfig({ ...systemConfig, taxa_entrega_padrao: parseInt(e.target.value, 10) || 0 })}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-bold focus:outline-none focus:border-[#00A878]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-4 border-t border-slate-100">
+                        <button
+                          type="submit"
+                          className="px-6 py-3 rounded-2xl bg-[#00A878] hover:bg-[#008f66] text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Salvar Parâmetros Bancários</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Right: Real-time Live Preview Replica of Payment Channels Box (5 cols) */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <div className="sticky top-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 flex items-center gap-1.5">
+                          <Eye className="w-3 h-3 text-[#00A878]" />
+                          <span>Pré-visualização dos Canais</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-semibold">
+                          Reprodução da Secção Pública
+                        </span>
+                      </div>
+
+                      {/* Live Preview Box (Exact replica of image 2) */}
+                      <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-md space-y-5">
+                        <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                          <div className="w-9 h-9 rounded-xl bg-[#E8F5F1] text-[#00A878] flex items-center justify-center shrink-0">
+                            <CreditCard className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-[#123B7A] uppercase tracking-tight">
+                              {systemConfig.canais_pagamento_titulo || 'Canais Oficiais de Pagamento em Angola'}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {systemConfig.canais_pagamento_subtitulo || 'Liquidação 100% segura através do sistema bancário nacional (EMIS / BAI)'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Multicaixa Express Preview Card */}
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Smartphone className="w-4 h-4 text-[#00A878]" />
+                              <span className="text-xs font-black text-slate-900">Multicaixa Express (MCX)</span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#E8F5F1] text-[#00A878]">
+                              {systemConfig.multicaixa_tag || 'Activação Imediata'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                              <span className="text-slate-500">Entidade:</span>
+                              <span className="font-mono font-bold text-slate-900">{systemConfig.multicaixa_entidade || '99024'}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                              <span className="text-slate-500">Telemóvel Express / Apoio:</span>
+                              <span className="font-mono font-bold text-slate-900">{systemConfig.multicaixa_express_numero || '+244 927 042 499'}</span>
+                            </div>
+                          </div>
+
+                          <p className="text-[11px] text-slate-500 pt-1 leading-relaxed">
+                            {systemConfig.multicaixa_instrucao || 'Validação automática por cruzamento do número de envio ou ID de transacção.'}
+                          </p>
+                        </div>
+
+                        {/* Bank Transfer Preview Card */}
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Landmark className="w-4 h-4 text-[#123B7A]" />
+                              <span className="text-xs font-black text-slate-900">
+                                {systemConfig.banco_nome || 'BAI — Banco Angolano de Investimentos'}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#123B7A]">
+                              {systemConfig.banco_tag || 'Bancário'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between items-center py-1 border-b border-slate-200/60">
+                              <span className="text-slate-500">Titular da Conta:</span>
+                              <span className="font-bold text-slate-900 text-right">{systemConfig.banco_titular || 'MUTIKUKWAMA SAÚDE TECNOLOGIAS LDA'}</span>
+                            </div>
+                            <div className="py-1 border-b border-slate-200/60">
+                              <span className="text-slate-500 block mb-0.5">IBAN Angolano:</span>
+                              <span className="font-mono font-bold text-slate-900 block break-all text-[11px]">
+                                {systemConfig.banco_iban || 'AO06 0040 0000 1234 5678 9012 3'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1">
+                              <span className="text-slate-500">Código SWIFT / BIC:</span>
+                              <span className="font-mono font-bold text-slate-900">{systemConfig.banco_swift || 'BAIAOLLU'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Taxa de Entrega Badge */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+                          <span className="font-bold text-amber-900">Taxa de Entrega Padrão de Medicamentos:</span>
+                          <span className="font-black text-amber-900">
+                            {(systemConfig.taxa_entrega_padrao ?? 1500).toLocaleString('pt-AO')} AOA
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </form>
+              </div>
             )}
           </div>
         )}
