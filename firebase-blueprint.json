@@ -1,0 +1,194 @@
+{
+  "entities": {
+    "HealthUnit": {
+      "title": "HealthUnit",
+      "description": "Unidade de saúde (farmácia, clínica, hospital, laboratório ou depósito)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nome": { "type": "string", "maxLength": 255 },
+        "slug": { "type": "string", "maxLength": 255 },
+        "tipo": { "type": "string", "enum": ["farmacia", "clinica", "hospital", "centro_medico", "laboratorio", "veterinaria", "consultorio", "deposito"] },
+        "provincia": { "type": "string", "maxLength": 100 },
+        "municipio": { "type": "string", "maxLength": 100 },
+        "bairro": { "type": "string", "maxLength": 100 },
+        "endereco_completo": { "type": "string", "maxLength": 500 },
+        "telefone": { "type": "string", "maxLength": 50 },
+        "whatsapp": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 255 },
+        "plano_tipo": { "type": "string", "enum": ["basico", "medio", "avancado"] },
+        "plano_status": { "type": "string", "enum": ["ativo", "expirado", "pendente", "cancelado"] },
+        "avaliacao": { "type": "number" },
+        "total_avaliacoes": { "type": "number" }
+      },
+      "required": ["id", "nome", "tipo", "provincia", "municipio", "telefone"]
+    },
+    "ProductItem": {
+      "title": "ProductItem",
+      "description": "Produto ou medicamento registado na unidade de saúde",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "unidade_id": { "type": "string", "maxLength": 128 },
+        "nome": { "type": "string", "maxLength": 255 },
+        "nome_generico": { "type": "string", "maxLength": 255 },
+        "descricao": { "type": "string", "maxLength": 2000 },
+        "categoria": { "type": "string", "enum": ["medicamento", "suplemento", "higiene", "material_medico"] },
+        "preco": { "type": "number" },
+        "quantidade_stock": { "type": "number" },
+        "disponivel": { "type": "boolean" },
+        "destaque": { "type": "boolean" }
+      },
+      "required": ["id", "unidade_id", "nome", "preco"]
+    },
+    "ServiceItem": {
+      "title": "ServiceItem",
+      "description": "Serviço ou consulta médica",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "unidade_id": { "type": "string", "maxLength": 128 },
+        "nome": { "type": "string", "maxLength": 255 },
+        "descricao": { "type": "string", "maxLength": 2000 },
+        "especialidade": { "type": "string", "maxLength": 150 },
+        "preco": { "type": "number" },
+        "disponivel": { "type": "boolean" }
+      },
+      "required": ["id", "unidade_id", "nome", "preco"]
+    },
+    "ExamItem": {
+      "title": "ExamItem",
+      "description": "Exame laboratorial ou imagiológico",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "unidade_id": { "type": "string", "maxLength": 128 },
+        "nome": { "type": "string", "maxLength": 255 },
+        "descricao": { "type": "string", "maxLength": 2000 },
+        "tipo_exame": { "type": "string", "maxLength": 100 },
+        "preco": { "type": "number" },
+        "disponivel": { "type": "boolean" }
+      },
+      "required": ["id", "unidade_id", "nome", "preco"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Pedido de medicamento ou agendamento realizado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "codigo_pedido": { "type": "string", "maxLength": 50 },
+        "unidade_id": { "type": "string", "maxLength": 128 },
+        "unidade_nome": { "type": "string", "maxLength": 255 },
+        "paciente_nome": { "type": "string", "maxLength": 255 },
+        "paciente_telefone": { "type": "string", "maxLength": 50 },
+        "paciente_whatsapp": { "type": "string", "maxLength": 50 },
+        "paciente_email": { "type": "string", "maxLength": 255 },
+        "modalidade": { "type": "string", "enum": ["levantamento", "entrega"] },
+        "status": { "type": "string", "enum": ["pendente", "confirmado", "em_preparacao", "pronto_levantamento", "a_caminho", "concluido", "cancelado"] },
+        "subtotal": { "type": "number" },
+        "taxa_entrega": { "type": "number" },
+        "total": { "type": "number" }
+      },
+      "required": ["id", "codigo_pedido", "unidade_id", "paciente_nome", "total", "status"]
+    },
+    "MinsaAnnouncement": {
+      "title": "MinsaAnnouncement",
+      "description": "Comunicado ou circular institucional do Ministério da Saúde",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "numero_despacho": { "type": "string", "maxLength": 100 },
+        "titulo": { "type": "string", "maxLength": 300 },
+        "conteudo": { "type": "string", "maxLength": 10000 },
+        "categoria": { "type": "string", "enum": ["circular_normativa", "alerta_farmacovigilancia", "atualizacao_tabela_precos", "campanha_vacinacao", "despacho_ministerial"] },
+        "prioridade": { "type": "string", "enum": ["normal", "urgente", "critica"] },
+        "data_emissao": { "type": "string", "maxLength": 50 },
+        "emitido_por": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "numero_despacho", "titulo", "conteudo", "categoria", "prioridade"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Avaliação e classificação por estrelas de uma unidade de saúde",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "unidade_id": { "type": "string", "maxLength": 128 },
+        "paciente_nome": { "type": "string", "maxLength": 255 },
+        "estrelas": { "type": "number" },
+        "comentario": { "type": "string", "maxLength": 1000 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "unidade_id", "paciente_nome", "estrelas"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de utilizador da plataforma",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nome": { "type": "string", "maxLength": 255 },
+        "email": { "type": "string", "maxLength": 255 },
+        "telefone": { "type": "string", "maxLength": 50 },
+        "role": { "type": "string", "enum": ["paciente", "unidade", "deposito", "admin", "super_admin", "institucional"] },
+        "unidade_id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "nome", "email", "role"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Registo de auditoria e operações do sistema",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "acao": { "type": "string", "maxLength": 255 },
+        "categoria": { "type": "string", "maxLength": 100 },
+        "usuario_id": { "type": "string", "maxLength": 128 },
+        "usuario_nome": { "type": "string", "maxLength": 255 },
+        "usuario_role": { "type": "string", "maxLength": 50 },
+        "detalhes": { "type": "string", "maxLength": 2000 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "acao", "categoria", "created_at"]
+    }
+  },
+  "firestore": {
+    "/unidades/{unitId}": {
+      "schema": "HealthUnit",
+      "description": "Coleção de unidades de saúde e depósitos"
+    },
+    "/produtos/{productId}": {
+      "schema": "ProductItem",
+      "description": "Coleção de produtos e medicamentos"
+    },
+    "/servicos/{serviceId}": {
+      "schema": "ServiceItem",
+      "description": "Coleção de serviços e consultas médicas"
+    },
+    "/exames/{examId}": {
+      "schema": "ExamItem",
+      "description": "Coleção de exames clínicos e laboratoriais"
+    },
+    "/pedidos/{orderId}": {
+      "schema": "Order",
+      "description": "Coleção de pedidos de utentes e farmácias"
+    },
+    "/anuncios_minsa/{announcementId}": {
+      "schema": "MinsaAnnouncement",
+      "description": "Coleção de comunicados e directrizes do Ministério da Saúde"
+    },
+    "/avaliacoes/{reviewId}": {
+      "schema": "Review",
+      "description": "Coleção de avaliações e classificações de unidades"
+    },
+    "/usuarios/{userId}": {
+      "schema": "UserProfile",
+      "description": "Perfis de utilizadores autenticados"
+    },
+    "/logs_atividade/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Logs de auditoria e segurança administrativa"
+    }
+  }
+}

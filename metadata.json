@@ -1,0 +1,7 @@
+{
+  "name": "MUTIKUKWAMA SAÚDE",
+  "description": "Plataforma Nacional SaaS de Saúde de Angola: Conectando Pacientes, Farmácias, Clínicas, Hospitais, Laboratórios e Depósitos com Pesquisa Inteligente, Leitura de Receitas com IA e Gestão Integrada.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

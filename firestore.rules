@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'mmccomercial12@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Unidades de Saúde
+    match /unidades/{unitId} {
+      allow read: if isValidId(unitId) && (
+        resource == null ||
+        resource.data.tipo != 'deposito' ||
+        isSignedIn()
+      );
+      allow create, update: if isValidId(unitId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().nome is string && incoming().nome.size() > 0)
+      );
+      allow delete: if isValidId(unitId) && isAdmin();
+    }
+
+    // Produtos e Medicamentos
+    match /produtos/{productId} {
+      allow read: if isValidId(productId);
+      allow create, update: if isValidId(productId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().nome is string && incoming().preco is number)
+      );
+      allow delete: if isValidId(productId) && (isSignedIn() || isAdmin());
+    }
+
+    // Serviços Médicos
+    match /servicos/{serviceId} {
+      allow read: if isValidId(serviceId);
+      allow create, update: if isValidId(serviceId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().nome is string && incoming().preco is number)
+      );
+      allow delete: if isValidId(serviceId) && (isSignedIn() || isAdmin());
+    }
+
+    // Exames Clínicos
+    match /exames/{examId} {
+      allow read: if isValidId(examId);
+      allow create, update: if isValidId(examId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().nome is string && incoming().preco is number)
+      );
+      allow delete: if isValidId(examId) && (isSignedIn() || isAdmin());
+    }
+
+    // Pedidos
+    match /pedidos/{orderId} {
+      allow read: if isValidId(orderId) && (
+        isSignedIn() ||
+        resource.data.paciente_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isValidId(orderId) && (
+        incoming().codigo_pedido is string &&
+        incoming().total is number &&
+        incoming().unidade_id is string
+      );
+      allow update: if isValidId(orderId) && (
+        isAdmin() ||
+        (isSignedIn() && (
+          resource.data.paciente_id == request.auth.uid ||
+          resource.data.unidade_id == request.auth.uid
+        ))
+      );
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    // Comunicados e Circulares do MINSA
+    match /anuncios_minsa/{announcementId} {
+      allow read: if isValidId(announcementId);
+      allow create, update: if isValidId(announcementId) && (
+        isAdmin() ||
+        (isSignedIn() && incoming().numero_despacho is string && incoming().titulo is string)
+      );
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    // Avaliações de Unidades
+    match /avaliacoes/{reviewId} {
+      allow read: if isValidId(reviewId);
+      allow create: if isValidId(reviewId) && (
+        incoming().unidade_id is string &&
+        incoming().estrelas is number &&
+        incoming().estrelas >= 1 &&
+        incoming().estrelas <= 5
+      );
+      allow update, delete: if isValidId(reviewId) && isAdmin();
+    }
+
+    // Perfis de Utilizadores
+    match /usuarios/{userId} {
+      allow read: if isValidId(userId) && (
+        (isSignedIn() && request.auth.uid == userId) || isAdmin()
+      );
+      allow create, update: if isValidId(userId) && (
+        (isSignedIn() && request.auth.uid == userId) || isAdmin()
+      );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Logs de Auditoria
+    match /logs_atividade/{logId} {
+      allow read: if isValidId(logId) && isAdmin();
+      allow create: if isValidId(logId) && (
+        incoming().acao is string &&
+        incoming().categoria is string
+      );
+      allow update, delete: if false;
+    }
+  }
+}
