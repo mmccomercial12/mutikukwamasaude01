@@ -19,8 +19,10 @@ import { LoginPage } from './components/auth/LoginPage';
 import { LegalModal, LegalDocumentType } from './components/legal/LegalModal';
 import { UtenteDashboardView } from './components/utente/UtenteDashboardView';
 import { UnitRouteMapModal } from './components/units/UnitRouteMapModal';
+import { AccessDeniedView } from './components/common/AccessDeniedView';
 import { HealthUnit } from './types';
 import { getSavedUserGpsLocation } from './services/geoService';
+import { validateViewAccess } from './utils/rbac';
 
 type MainView = 'home' | 'search' | 'plans' | 'unit-dashboard' | 'admin' | 'admin-dashboard' | 'institutional' | 'login' | 'utente-dashboard';
 
@@ -44,6 +46,8 @@ const MainAppContent: React.FC = () => {
   // Legal Modal State
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocumentType>('termos');
+
+  const accessCheck = validateViewAccess(currentUser, currentView);
 
   const handleOpenLegalDoc = (doc: LegalDocumentType) => {
     setActiveLegalDoc(doc);
@@ -90,80 +94,92 @@ const MainAppContent: React.FC = () => {
 
       {/* Main View Router */}
       <main className="flex-1">
-        {currentView === 'home' && (
-          <div>
-            <HeroSection
-              onSearch={handleHeroSearch}
-              onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
-              onSelectUnit={handleOpenUnitProfile}
-              onViewPlans={() => setCurrentView('plans')}
-            />
-          </div>
-        )}
-
-        {currentView === 'search' && (
-          <SearchAndResultsView
-            initialQuery={searchQuery}
-            initialProvince={searchProvince}
-            initialMunicipality={searchMunicipality}
-            onSelectUnit={handleOpenUnitProfile}
-            onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
-            onOpenCart={() => setIsCartOpen(true)}
+        {!accessCheck.allowed ? (
+          <AccessDeniedView
+            title={accessCheck.title}
+            reason={accessCheck.reason}
+            recommendedView={accessCheck.recommendedView}
+            onNavigate={(view) => setCurrentView(view as MainView)}
           />
-        )}
+        ) : (
+          <>
+            {currentView === 'home' && (
+              <div>
+                <HeroSection
+                  onSearch={handleHeroSearch}
+                  onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
+                  onSelectUnit={handleOpenUnitProfile}
+                  onViewPlans={() => setCurrentView('plans')}
+                />
+              </div>
+            )}
 
-        {currentView === 'plans' && (
-          <PlansAndPricingView
-            onPlanSelected={(planId) => {
-              if (!currentUser) {
-                setAuthInitialMode('register');
-                setAuthInitialRole('unidade');
-                setCurrentView('login');
-              }
-            }}
-          />
-        )}
+            {currentView === 'search' && (
+              <SearchAndResultsView
+                initialQuery={searchQuery}
+                initialProvince={searchProvince}
+                initialMunicipality={searchMunicipality}
+                onSelectUnit={handleOpenUnitProfile}
+                onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
+                onOpenCart={() => setIsCartOpen(true)}
+              />
+            )}
 
-        {currentView === 'unit-dashboard' && (
-          <UnitDashboard
-            onNavigatePlans={() => setCurrentView('plans')}
-            onOpenCart={() => setIsCartOpen(true)}
-          />
-        )}
+            {currentView === 'plans' && (
+              <PlansAndPricingView
+                onPlanSelected={(planId) => {
+                  if (!currentUser) {
+                    setAuthInitialMode('register');
+                    setAuthInitialRole('unidade');
+                    setCurrentView('login');
+                  }
+                }}
+              />
+            )}
 
-        {(currentView === 'admin' || currentView === 'admin-dashboard') && (
-          <AdminSuperAdminDashboard />
-        )}
+            {currentView === 'unit-dashboard' && (
+              <UnitDashboard
+                onNavigatePlans={() => setCurrentView('plans')}
+                onOpenCart={() => setIsCartOpen(true)}
+              />
+            )}
 
-        {currentView === 'institutional' && (
-          <MinistryIntelligenceDashboard onBackToHome={() => setCurrentView('home')} />
-        )}
+            {(currentView === 'admin' || currentView === 'admin-dashboard') && (
+              <AdminSuperAdminDashboard />
+            )}
 
-        {currentView === 'utente-dashboard' && (
-          <UtenteDashboardView
-            onNavigateSearch={(q, p) => {
-              if (q) setSearchQuery(q);
-              if (p) setSearchProvince(p);
-              setCurrentView('search');
-            }}
-            onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
-            onSelectUnit={handleOpenUnitProfile}
-            onOpenRouteModal={(unit) => setSelectedUnitForRoute(unit)}
-          />
-        )}
+            {currentView === 'institutional' && (
+              <MinistryIntelligenceDashboard onBackToHome={() => setCurrentView('home')} />
+            )}
 
-        {currentView === 'login' && (
-          <LoginPage
-            onNavigateHome={() => setCurrentView('home')}
-            onNavigateRegisterUnit={() => {
-              setAuthInitialMode('register');
-              setAuthInitialRole('unidade');
-              setCurrentView('login');
-            }}
-            onOpenLegalDoc={handleOpenLegalDoc}
-            initialTab={authInitialMode}
-            initialRole={authInitialRole}
-          />
+            {currentView === 'utente-dashboard' && (
+              <UtenteDashboardView
+                onNavigateSearch={(q, p) => {
+                  if (q) setSearchQuery(q);
+                  if (p) setSearchProvince(p);
+                  setCurrentView('search');
+                }}
+                onOpenPrescriptionAI={() => setIsPrescriptionModalOpen(true)}
+                onSelectUnit={handleOpenUnitProfile}
+                onOpenRouteModal={(unit) => setSelectedUnitForRoute(unit)}
+              />
+            )}
+
+            {currentView === 'login' && (
+              <LoginPage
+                onNavigateHome={() => setCurrentView('home')}
+                onNavigateView={(view) => setCurrentView(view as MainView)}
+                onNavigateRegisterUnit={() => {
+                  setAuthInitialMode('register');
+                  setAuthInitialRole('unidade');
+                  setCurrentView('login');
+                }}
+                onOpenLegalDoc={handleOpenLegalDoc}
+                initialTab={authInitialMode}
+                initialRole={authInitialRole}
+              />
+            )}
+          </>
         )}
       </main>
 

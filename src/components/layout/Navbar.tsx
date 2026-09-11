@@ -23,8 +23,10 @@ import {
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
+import { useToast } from '../../context/ToastContext';
 import { supabaseData } from '../../services/supabase';
 import { LanguageCode, UserRole, SystemConfig } from '../../types';
+import { validateViewAccess } from '../../utils/rbac';
 
 interface NavbarProps {
   onOpenSearch?: () => void;
@@ -51,10 +53,38 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { language, setLanguage, t } = useLanguage();
   const { currentUser, isPatient, isUnit, isDepot, isAdmin, isSuperAdmin, isInstitutional, logout, switchRole, demoUsers } = useAuth();
   const { totalItemsCount } = useCart();
+  const { warning } = useToast();
   const [config, setConfig] = useState<SystemConfig>(() => supabaseData.getConfig());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+
+  const handleGuardedNavigate = (
+    targetView:
+      | 'home'
+      | 'search'
+      | 'plans'
+      | 'unit-dashboard'
+      | 'admin'
+      | 'admin-dashboard'
+      | 'institutional'
+      | 'utente-dashboard'
+      | 'login'
+  ) => {
+    if (!currentUser && targetView !== 'home' && targetView !== 'search' && targetView !== 'plans') {
+      onNavigate('login');
+      return;
+    }
+
+    const access = validateViewAccess(currentUser, targetView);
+    if (!access.allowed) {
+      warning(access.reason || 'Acesso restrito pelas regras de segurança (RBAC).');
+      onNavigate(targetView);
+      return;
+    }
+
+    onNavigate(targetView);
+  };
 
   useEffect(() => {
     const handleConfigUpdated = (e: any) => {
@@ -201,13 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (!currentUser) {
-                    onNavigate('login');
-                  } else {
-                    onNavigate('unit-dashboard');
-                  }
-                }}
+                onClick={() => handleGuardedNavigate('unit-dashboard')}
                 className={`py-1.5 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   currentActive === 'unit-dashboard' && !isDepot
                     ? 'text-[#123B7A] font-bold border-b-2 border-[#123B7A]'
@@ -218,13 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (!currentUser) {
-                    onNavigate('login');
-                  } else {
-                    onNavigate('unit-dashboard');
-                  }
-                }}
+                onClick={() => handleGuardedNavigate('unit-dashboard')}
                 className={`py-1.5 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   currentActive === 'unit-dashboard' && isDepot
                     ? 'text-[#123B7A] font-bold border-b-2 border-[#123B7A]'
@@ -236,13 +254,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (!currentUser) {
-                    onNavigate('login');
-                  } else {
-                    onNavigate('institutional');
-                  }
-                }}
+                onClick={() => handleGuardedNavigate('institutional')}
                 className={`py-1.5 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   currentActive === 'institutional'
                     ? 'text-[#123B7A] font-bold border-b-2 border-[#123B7A]'
@@ -254,13 +266,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (!currentUser) {
-                    onNavigate('login');
-                  } else {
-                    onNavigate('utente-dashboard');
-                  }
-                }}
+                onClick={() => handleGuardedNavigate('utente-dashboard')}
                 className={`py-1.5 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   currentActive === 'utente-dashboard'
                     ? 'text-[#123B7A] font-bold border-b-2 border-[#123B7A]'
@@ -272,13 +278,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (!currentUser) {
-                    onNavigate('login');
-                  } else {
-                    onNavigate('admin-dashboard');
-                  }
-                }}
+                onClick={() => handleGuardedNavigate('admin-dashboard')}
                 className={`py-1.5 transition-colors flex items-center gap-1.5 cursor-pointer ${
                   currentActive === 'admin-dashboard' || currentActive === 'admin'
                     ? 'text-[#123B7A] font-bold border-b-2 border-[#123B7A]'
@@ -422,11 +422,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
-              if (!currentUser) {
-                onNavigate('login');
-              } else {
-                onNavigate('unit-dashboard');
-              }
+              handleGuardedNavigate('unit-dashboard');
               setMobileMenuOpen(false);
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-bold text-slate-700 hover:bg-gray-50"
@@ -437,11 +433,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
-              if (!currentUser) {
-                onNavigate('login');
-              } else {
-                onNavigate('unit-dashboard');
-              }
+              handleGuardedNavigate('unit-dashboard');
               setMobileMenuOpen(false);
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-bold text-slate-700 hover:bg-gray-50"
@@ -452,11 +444,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
-              if (!currentUser) {
-                onNavigate('login');
-              } else {
-                onNavigate('institutional');
-              }
+              handleGuardedNavigate('institutional');
               setMobileMenuOpen(false);
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-bold text-slate-700 hover:bg-gray-50"
@@ -467,11 +455,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
-              if (!currentUser) {
-                onNavigate('login');
-              } else {
-                onNavigate('utente-dashboard');
-              }
+              handleGuardedNavigate('utente-dashboard');
               setMobileMenuOpen(false);
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-bold text-slate-700 hover:bg-gray-50 cursor-pointer"
@@ -482,11 +466,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
-              if (!currentUser) {
-                onNavigate('login');
-              } else {
-                onNavigate('admin-dashboard');
-              }
+              handleGuardedNavigate('admin-dashboard');
               setMobileMenuOpen(false);
             }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-bold text-slate-700 hover:bg-gray-50"
@@ -577,15 +557,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Role Switcher Modal (Allows testing all roles effortlessly) */}
       {roleSwitcherOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white border border-slate-200/80 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl text-slate-800 animate-in zoom-in-95">
+          <div className="bg-white border border-slate-200/80 rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl text-slate-800 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-lg font-black text-[#123B7A] uppercase flex items-center gap-2 tracking-tight">
                   <User className="w-5 h-5 text-[#00A878]" />
-                  Simulador de Perfis de Utilizador
+                  Simulador de Perfis e Regras de Acesso (RBAC)
                 </h3>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Experimente a plataforma sob a perspectiva de cada interveniente no ecossistema de saúde em Angola
+                  Experimente as regras e permissões estritas de cada perfil no ecossistema de saúde em Angola
                 </p>
               </div>
               <button
@@ -618,6 +598,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="grid grid-cols-1 gap-2.5 my-3">
               {demoUsers.map((user) => {
                 const isSelected = currentUser?.id === user.id;
+                const boundaryText =
+                  user.role === 'super_admin'
+                    ? 'Acesso Global Total'
+                    : user.role === 'unidade'
+                    ? 'Bloqueado no Super Admin e MINSA'
+                    : user.role === 'deposito'
+                    ? 'Bloqueado no Super Admin e MINSA'
+                    : user.role === 'institucional'
+                    ? 'Bloqueado em Depósito, Unidade e Super Admin'
+                    : 'Acesso Exclusivo ao Portal do Utente';
+
                 return (
                   <button
                     key={user.id}
@@ -633,7 +624,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <div className="flex items-center gap-3">
                       <div
-                        className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm ${
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 ${
                           user.role === 'super_admin'
                             ? 'bg-red-100 text-red-700'
                             : user.role === 'admin'
@@ -656,7 +647,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
 
                       <div>
-                        <div className="font-black text-sm text-[#123B7A] flex items-center gap-2">
+                        <div className="font-black text-sm text-[#123B7A] flex items-center gap-2 flex-wrap">
                           <span>{user.nome}</span>
                           <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700">
                             {user.role.replace('_', ' ')}
@@ -667,10 +658,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <Lock className="w-3 h-3 text-slate-400" />
                           <span>Senha: <strong>{user.senha_provisoria || 'Mutiku@2026'}</strong></span>
                         </div>
+                        <div className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 rounded-md px-1.5 py-0.5 mt-1 inline-block">
+                          Regra: {boundaryText}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       {isSelected ? (
                         <span className="text-xs font-black text-[#00A878] bg-[#E8F5F1] px-3 py-1 rounded-full uppercase tracking-wider border border-[#00A878]/20">
                           Activo

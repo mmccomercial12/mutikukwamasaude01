@@ -38,6 +38,7 @@ import { supabaseData } from '../../services/supabase';
 import { UserRole, PlanType, PlanPeriodicity, PaymentMethod } from '../../types';
 import { PROVINCES_ANGOLA, PLANS_DEFINITIONS } from '../../services/mockData';
 import { reverseGeocodeCoordinates, saveUserGpsLocation } from '../../services/geoService';
+import { getHomeDashboardForRole } from '../../utils/rbac';
 import {
   evaluatePasswordStrength,
   isValidEmail,
@@ -49,6 +50,7 @@ import { LegalDocumentType } from '../legal/LegalModal';
 
 interface LoginPageProps {
   onNavigateHome: () => void;
+  onNavigateView?: (view: any) => void;
   onNavigateRegisterUnit?: () => void;
   onOpenLegalDoc?: (doc: LegalDocumentType) => void;
   initialTab?: 'login' | 'register';
@@ -57,6 +59,7 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onNavigateHome,
+  onNavigateView,
   onNavigateRegisterUnit,
   onOpenLegalDoc,
   initialTab = 'login',
@@ -310,8 +313,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       if (ok) {
         success('Sessão iniciada com sucesso!', 'Bem-vindo');
         const user = supabaseData.getCurrentUser();
-        if (user?.role === 'institucional') {
-          onNavigateHome(); // or dashboard
+        const targetView = getHomeDashboardForRole(user?.role);
+        if (onNavigateView) {
+          onNavigateView(targetView);
         } else {
           onNavigateHome();
         }
@@ -331,7 +335,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       const ok = await loginWithGoogle();
       if (ok) {
         success('Autenticação Google concluída com sucesso!');
-        onNavigateHome();
+        const user = supabaseData.getCurrentUser();
+        const targetView = getHomeDashboardForRole(user?.role);
+        if (onNavigateView) {
+          onNavigateView(targetView);
+        } else {
+          onNavigateHome();
+        }
       }
     } catch (err: any) {
       error('Não foi possível autenticar com a Conta Google.');
@@ -648,13 +658,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               </span>
               <span className="text-[10px] text-slate-400 font-medium">Contas Oficiais</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               <button
                 type="button"
                 id="btn-demo-superadmin-card"
                 onClick={() => handleQuickDemoSwitch('super_admin')}
-                className="px-2.5 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
-                title="Preencher credenciais de Super Administrador"
+                className="px-2 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
+                title="Preencher credenciais de Super Administrador (Acesso Global)"
               >
                 Super Admin
               </button>
@@ -662,8 +672,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 type="button"
                 id="btn-demo-farmacia-card"
                 onClick={() => handleQuickDemoSwitch('unidade')}
-                className="px-2.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#123B7A] border border-blue-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
-                title="Preencher credenciais de Gestor de Farmácia"
+                className="px-2 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#123B7A] border border-blue-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
+                title="Preencher credenciais de Farmácia (Bloqueado em Super Admin e MINSA)"
               >
                 Farmácia
               </button>
@@ -671,19 +681,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 type="button"
                 id="btn-demo-deposito-card"
                 onClick={() => handleQuickDemoSwitch('deposito')}
-                className="px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
-                title="Preencher credenciais de Gestor de Depósito"
+                className="px-2 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
+                title="Preencher credenciais de Depósito Grossista B2B (Bloqueado em Super Admin e MINSA)"
               >
                 Depósito
               </button>
               <button
                 type="button"
+                id="btn-demo-minsa-card"
+                onClick={() => handleQuickDemoSwitch('institucional')}
+                className="px-2 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
+                title="Preencher credenciais do Ministério da Saúde MINSA (Bloqueado em Depósito, Unidade e Super Admin)"
+              >
+                Ministério (MINSA)
+              </button>
+              <button
+                type="button"
                 id="btn-demo-paciente-card"
                 onClick={() => handleQuickDemoSwitch('paciente')}
-                className="px-2.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
-                title="Preencher credenciais de Utente / Paciente"
+                className="px-2 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition-all shadow-2xs text-center cursor-pointer"
+                title="Preencher credenciais de Utente / Paciente (Portal do Utente)"
               >
-                Utente / Paciente
+                Utente
               </button>
             </div>
 

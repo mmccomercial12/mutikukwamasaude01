@@ -136,5 +136,13 @@ service cloud.firestore {
       );
       allow update, delete: if false;
     }
+
+    // Configurações do Sistema (Planos, Pagamentos e Rodapé)
+    match /config/{configId} {
+      allow read: if isValidId(configId);
+      allow create, update: if isValidId(configId) && (isAdmin() || isSignedIn());
+      allow delete: if isValidId(configId) && isAdmin();
+    }
   }
 }
+
